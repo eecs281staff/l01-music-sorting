@@ -1,5 +1,8 @@
 ## EECS 281 Advanced Makefile
 
+# Bash is needed for project identifer logic
+SHELL = /bin/bash
+
 # How to use this Makefile...
 ###################
 ###################
@@ -32,9 +35,9 @@ EXECUTABLE  = lab1_bad
 
 # The following line looks for a project's main() in files named project*.cpp,
 # executable.cpp (substituted from EXECUTABLE above), or main.cpp
-#PROJECTFILE = $(or $(wildcard project*.cpp $(EXECUTABLE).cpp), main.cpp)
+PROJECTFILE = $(or $(wildcard project*.cpp $(EXECUTABLE).cpp), main.cpp)
 # If main() is in another file delete line above, edit and uncomment below
-PROJECTFILE = lab1_bad.cpp
+#PROJECTFILE = mymainfile.cpp
 
 # This is the path from the CAEN home folder to where projects will be
 # uploaded. (eg. /home/mmdarden/eecs281/project1)
@@ -44,11 +47,6 @@ REMOTE_PATH := eecs281_$(EXECUTABLE)_sync
 #######################
 # TODO (end) #
 #######################
-
-# enables c++17 on CAEN or 281 autograder
-PATH := /usr/um/gcc-11.3.0/bin:$(PATH)
-LD_LIBRARY_PATH := /usr/um/gcc-11.3.0/lib64
-LD_RUN_PATH := /usr/um/gcc-11.3.0/lib64
 
 # disable built-in rules
 .SUFFIXES:
@@ -62,6 +60,7 @@ CXX         = g++
 
 # list of test drivers (with main()) for development
 TESTSOURCES = $(wildcard test*.cpp)
+TESTSOURCES := $(filter-out $(PROJECTFILE),$(TESTSOURCES))
 
 # list of sources used in project
 SOURCES     = $(wildcard *.cpp)
@@ -98,12 +97,6 @@ profile:
 	$(CXX) $(CXXFLAGS) $(SOURCES) -o $(EXECUTABLE)_profile
 .PHONY: profile
 
-# make gprof - will compile "all" with $(CXXFLAGS) and the -pg (for gprof)
-gprof: CXXFLAGS += -pg
-gprof:
-	$(CXX) $(CXXFLAGS) $(SOURCES) -o $(EXECUTABLE)_profile
-.PHONY: gprof
-
 # make static - will perform static analysis in the matter currently used
 #               on the autograder
 static:
@@ -122,7 +115,7 @@ NO_IDENTIFIER = xcode_redirect.hpp,getopt.h,getopt.c,xgetopt.h
 # make identifier - will check to ensure that all source code and header files
 #                   include the project identifier, skip subdirectories
 #                   also removes old submit tarballs, they are outdated
-identifier: $(foreach tsrc,$(TESTSOURCES),$(eval NO_IDENTIFIER := $(NO_IDENTIFIER),$(tsrc)))
+identifier: $(foreach tsrc,$(wildcard test*.cpp),$(eval NO_IDENTIFIER := $(NO_IDENTIFIER),$(tsrc)))
 identifier:
 	@if [ $$(grep --include=*.{h,hpp,c,cpp} --exclude={$(NO_IDENTIFIER)} --directories=skip -L $(IDENTIFIER) * | wc -l) -ne 0 ]; then \
 		printf "Missing project identifier in file(s): "; \
@@ -139,6 +132,10 @@ all: profile valgrind
 .PHONY: all
 
 $(EXECUTABLE): $(OBJECTS)
+ifeq ($(EXECUTABLE), $(MAKECMDGOALS))
+	@echo $(EXECUTABLE) is an invalid target, use \'make\' or \'make help\' to find a valid target
+	@exit 1
+endif
 ifneq ($(EXECUTABLE), executable)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $(EXECUTABLE)
 else
@@ -180,18 +177,16 @@ EXCLUDE_FILES = getopt.\?
 
 # get a list of all files that might be included in a submit
 # different submit types can do additional filtering to remove unwanted files
-FULL_SUBMITFILES=$(filter-out $(TESTSOURCES), \
+FULL_SUBMITFILES=$(filter-out $(wildcard test*.cpp), \
                    $(wildcard Makefile *.h *.hpp *.cpp test*.txt))
 
-# make fullsubmit.tar.gz - cleans, runs dos2unix, creates tarball
-# including test files
+# make fullsubmit.tar.gz - cleans, creates tarball including test files
 $(FULL_SUBMITFILE): $(FULL_SUBMITFILES)
 	rm -f $(PARTIAL_SUBMITFILE) $(FULL_SUBMITFILE) $(UNGRADED_SUBMITFILE)
 	COPYFILE_DISABLE=true tar --exclude=$(EXCLUDE_FILES) -vczf $(FULL_SUBMITFILE) $(FULL_SUBMITFILES)
 	@echo !!! Final submission prepared, test files included... READY FOR GRADING !!!
 
-# make partialsubmit.tar.gz - cleans, creates tarball
-# omitting test files
+# make partialsubmit.tar.gz - cleans, creates tarball omitting test files
 PARTIAL_SUBMITFILES=$(filter-out $(wildcard test*.txt), $(FULL_SUBMITFILES))
 $(PARTIAL_SUBMITFILE): $(PARTIAL_SUBMITFILES)
 	rm -f $(PARTIAL_SUBMITFILE) $(FULL_SUBMITFILE) $(UNGRADED_SUBMITFILE)
@@ -235,7 +230,7 @@ endif
       --exclude '*.code-workspace' \
       --filter=":- .gitignore" \
       "."/ \
-      "$(UNIQNAME)@login.engin.umich.edu:$(REMOTE_PATH)/"
+      "$(UNIQNAME)@login-course.engin.umich.edu:$(REMOTE_PATH)/"
 	echo "Files synced to CAEN at ~/$(REMOTE_PATH)/"
 .PHONY: sync2caen
 
@@ -268,6 +263,14 @@ EECS281 Advanced Makefile Help
        It is also useful when trying to find buggy solutions in the
        autograder.
            $$ make fullsubmit
+    C) Build 'ungraded.tar.gz' a tarball without tests that the autograder
+       will not try to build.
+
+           *** USE THIS ONLY TO UPLOAD CODE TO THE AUTOGRADER FOR STAFF ***
+
+       This is only useful for a staff member who wants to view your most
+       recent code on the autograder.
+           $$ make ungraded
 
 * Unit testing support
     A) Source files for unit testing should be named test*.cpp.  Examples
